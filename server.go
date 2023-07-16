@@ -27,8 +27,14 @@ func main() {
 
 }
 func rootHandler(w http.ResponseWriter, r *http.Request) {
-	if len(r.URL.Path) != 1 && r.URL.Path[0:3] != "/api" {
-		http.Redirect(w, r, r.URL.Path[1:], http.StatusTemporaryRedirect)
+	if len(r.URL.Path) != 1 {
+		db := openConnection()
+		lurl, exists := resolveShorturl(db, r.URL.Path[1:])
+		if exists {
+			http.Redirect(w, r, lurl, http.StatusTemporaryRedirect)
+		} else {
+			http.ServeFile(w, r, "./static/404.html")
+		}
 		return
 	}
 	http.ServeFile(w, r, "./static/index.html")
@@ -48,8 +54,11 @@ func apiHandler(w http.ResponseWriter, r *http.Request) {
 			panic(err)
 		}
 		db := openConnection()
-		result := insertAndPublish(db, lurl.Lurl)
-		log.Println(lurl.Lurl, result)
+		result, exists := insertAndPublish(db, lurl.Lurl)
+		if exists {
+			result = findRow(db, lurl.Lurl)
+		}
+		fmt.Fprintf(w, "{\"surl\":\"%s\"}", result)
 	}
 }
 func openConnection() *sql.DB {
@@ -69,7 +78,7 @@ func openConnection() *sql.DB {
 	}
 	return db
 }
-func insertAndPublish(db *sql.DB, lurl string) string {
+func insertAndPublish(db *sql.DB, lurl string) (string, bool) {
 	uuid := uuid.NewString()
 	stmt, err := db.Prepare("insert into route(lurl, surl) values(?, ?)")
 	if err != nil {
@@ -78,7 +87,7 @@ func insertAndPublish(db *sql.DB, lurl string) string {
 	defer stmt.Close()
 	_, err = stmt.Exec(lurl, uuid)
 	if err != nil {
-		log.Fatal(err)
+		return "", true
 	}
 
 	stmt2, err := db.Prepare("select id from route where surl=?")
@@ -92,33 +101,52 @@ func insertAndPublish(db *sql.DB, lurl string) string {
 		log.Fatal(err)
 	}
 
-	var i big.Int
-	_ = i.SetInt64(int64(idTemp))
+	var surl string = enode62(idTemp)
 	stmt3, err := db.Prepare("update route set surl=? where id=?")
 	if err != nil {
 		log.Fatal(err, "while update")
 	}
 	defer stmt3.Close()
-	_, err = stmt3.Exec(i.Text(62), idTemp)
+	_, err = stmt3.Exec(surl, idTemp)
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf(" id value is %d and enc is %s", idTemp, i.Text(62))
-	return lurl + uuid
+	log.Printf(" id value is %d and enc is %s", idTemp, surl)
+	return surl, false
+}
+func enode62(id int) string {
+	var i big.Int
+	var surl string
+	_ = i.SetInt64(int64(id))
+	surl = i.Text(62)
+	return surl
 }
 
-// func findRow(db *sql.DB, url string) bool {
-// 	stmt, err := db.Prepare("select lurl, surl from route where lurl=?")
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	defer stmt.Close()
-// 	var lurl string
-// 	var surl string
-// 	err = stmt.QueryRow(url).Scan(&lurl, &surl)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	fmt.Println(lurl, surl)
-// 	return true
-// }
+func findRow(db *sql.DB, url string) string {
+	stmt, err := db.Prepare("select surl from route where lurl=?")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer stmt.Close()
+	var surl string
+	err = stmt.QueryRow(url).Scan(&surl)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return surl
+}
+func resolveShorturl(db *sql.DB, url string) (string, bool) {
+	stmt, err := db.Prepare("select lurl from route where surl=?")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer stmt.Close()
+	var lurl string
+	err = stmt.QueryRow(url).Scan(&lurl)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", false
+		}
+	}
+	return lurl, true
+}
