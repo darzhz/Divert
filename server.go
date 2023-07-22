@@ -7,7 +7,6 @@ import (
 	"log"
 	"math/big"
 	"net/http"
-	"strings"
 
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
@@ -19,6 +18,8 @@ type lurl struct {
 
 func main() {
 	http.HandleFunc("/", rootHandler)
+	fs := http.FileServer(http.Dir("./divert/dist/assets"))
+	http.Handle("/assets/", http.StripPrefix("/assets", fs))
 	http.HandleFunc("/api/", apiHandler)
 	fmt.Printf("server started at port 8080\n")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
@@ -37,15 +38,15 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	http.ServeFile(w, r, "./static/index.html")
+	http.ServeFile(w, r, "./divert/dist/index.html")
 }
 func apiHandler(w http.ResponseWriter, r *http.Request) {
 	db := openConnection()
 	defer db.Close()
 	switch r.Method {
-	case "GET":
-		id := strings.TrimPrefix(r.URL.Path, "/api/")
-		fmt.Fprintf(w, "this is the api route %s", id)
+	// case "GET":
+	// 	id := strings.TrimPrefix(r.URL.Path, "/api/")
+	// 	fmt.Fprintf(w, "this is the api route %s", id)
 	case "POST":
 		decoder := json.NewDecoder(r.Body)
 		var lurl lurl
@@ -58,6 +59,7 @@ func apiHandler(w http.ResponseWriter, r *http.Request) {
 		if exists {
 			result = findRow(db, lurl.Lurl)
 		}
+		w.Header().Set("content-type", "application/json")
 		fmt.Fprintf(w, "{\"surl\":\"%s\"}", result)
 	}
 }

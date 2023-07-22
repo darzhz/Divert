@@ -1,16 +1,37 @@
 <script>
+  import {  createEventDispatcher } from "svelte";
 export let placeholder;
+export let TextElement;
     let text;
     const clear = ()=>{
         text = null;
     }
+    const dispatch = createEventDispatcher();
+    const validateUrl = () => {
+      if (isValidURL(text)) {
+        var parser = document.createElement('a');
+        parser.href = text;
+        if(parser.protocol != text.substring(0,5)){
+          text = 'http://'+text;
+        }
+        TextElement.style.backgroundColor = 'rgba(0, 0, 0, 0.582)';
+        dispatch('valid',{ url:text });
+      }else{
+        TextElement.style.backgroundColor = 'red';
+      }
+    }
+    const isValidURL = (string) => {
+      var res = string.match(/(http(s)?:\/\/.)?(www\.)?[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)/g);
+      return (res !== null)
+    };
+    
 </script>
-<div id="box">
+<div id="box" bind:this={TextElement}>
     <div id="innerbox">
     <span class="material-symbols-rounded iconx">
-link
+circle
 </span>
-    <input type="text" placeholder={placeholder} bind:value={text}>
+    <input type="text" placeholder={placeholder} bind:value={text} on:input={validateUrl} spellcheck="false">
     <!-- svelte-ignore a11y-click-events-have-key-events -->
     <!-- svelte-ignore a11y-no-static-element-interactions -->
     <span class="material-symbols-rounded iconx" on:click={clear}>
@@ -99,6 +120,7 @@ close
         border-radius: 8px;
         color: antiquewhite;
         margin :10px;
+        transition: all 300ms ease-in-out;
     }
     .iconx {
         font-size: xx-large;
