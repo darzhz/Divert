@@ -11,7 +11,7 @@ export let TextElement;
       if (isValidURL(text)) {
         var parser = document.createElement('a');
         parser.href = text;
-        if(parser.protocol != text.substring(0,5)){
+        if(parser.protocol != text.substring(0,5) && text.substring(0,6) != 'https:'){
           text = 'http://'+text;
         }
         TextElement.style.backgroundColor = 'rgba(0, 0, 0, 0.582)';
